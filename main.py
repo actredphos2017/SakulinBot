@@ -1,23 +1,22 @@
 from featurewebcraftapi import WebCraftAPIFeature
-from feature2048 import _2048Feature
-from featurecoderunner import CodeRunnerFeature
-from playground import TestFeature
 
 from tgbot import build_bot
+import os
+from dotenv import load_dotenv
 
-tgBotToken = '7135037009:AAFtf3nwFrXcOGbchNBpTfVF4UO7dbcRidI'
-webCraftHostname = 'mc6.ytonidc.com:14132'
+load_dotenv()
+
+tgbot_token = os.getenv('TGBOT_TOKEN')
+web_craft_hostname = os.getenv('CRAFT_HOST_NAME')
+admin_authorization = os.getenv('ADMIN_AUTHORIZATION')
 
 if __name__ == '__main__':
     build_bot(
         features=[
-            # _2048Feature(),
-            # CodeRunnerFeature(),
-            WebCraftAPIFeature(webCraftHostname, False)
-            # TestFeature()
+            WebCraftAPIFeature(web_craft_hostname, admin_authorization, False)
         ],
         bot_meta={
             'type': 'telegram',
-            'token': tgBotToken
+            'token': tgbot_token
         }
     ).run()

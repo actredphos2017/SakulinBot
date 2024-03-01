@@ -38,6 +38,21 @@ class MsgReply:
         self.msg = msg
         self.events = events
 
+    def reply_markup(self):
+        keyboard = telebot.types.InlineKeyboardMarkup()
+        event_rows = [self.events[i:min(i + 2, len(self.events))] for i in
+                      range(0, len(self.events), 2)]
+        for event_row in event_rows:
+            keyboard.row(
+                *[telebot.types.InlineKeyboardButton(item.title, callback_data=item.event)
+                  for item in event_row]
+            )
+
+        return keyboard
+
+    def empty_event(self):
+        return self.events is None or len(self.events) == 0
+
 
 class IFeature:
     @abstractmethod
@@ -96,28 +111,26 @@ class BotBuilder:
             if response is not None:
                 if isinstance(response, str):
                     bot.reply_to(msg_model, response)
-                elif response.events is None or len(response.events) == 0:
+                elif response.empty_event():
                     bot.reply_to(msg_model, response.msg)
                 else:
-                    keyboard = telebot.types.InlineKeyboardMarkup()
-                    for item in response.events:
-                        keyboard.add(telebot.types.InlineKeyboardButton(item.title, callback_data=item.event))
-                    bot.reply_to(msg_model, response.msg, reply_markup=keyboard)
+                    bot.reply_to(msg_model, response.msg, reply_markup=response.reply_markup())
 
         @bot.callback_query_handler(func=lambda callback: True)
         def handle_event(call):
             response = self.route_event(call)
             if response is not None:
                 if isinstance(response, str):
-                    bot.send_message(call.message.chat.id, response)
-                elif response.events is None or len(response.events) == 0:
-                    bot.send_message(call.message.chat.id, response.msg)
+                    bot.edit_message_text(response, call.message.chat.id, call.message.message_id)
+                elif response.empty_event():
+                    bot.edit_message_text(response.msg, call.message.chat.id, call.message.message_id)
                 else:
-                    keyboard = telebot.types.InlineKeyboardMarkup()
-                    for item in response.events:
-                        keyboard.add(telebot.types.InlineKeyboardButton(item.title, callback_data=item.event))
-                    bot.send_message(call.message.chat.id, response.msg, reply_markup=keyboard)
-                bot.delete_message(call.message.chat.id, call.message.message_id)
+                    bot.edit_message_text(
+                        response.msg,
+                        call.message.chat.id,
+                        call.message.message_id,
+                        reply_markup=response.reply_markup()
+                    )
 
         self.start = lambda: bot.infinity_polling()
         return self
