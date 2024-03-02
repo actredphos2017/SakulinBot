@@ -1,6 +1,8 @@
 import io
 import sys
+
 import tgbot
+from tgbot import MsgReply
 
 
 def execute_code(code):
@@ -20,6 +22,13 @@ def execute_code(code):
 
 
 class CodeRunnerFeature(tgbot.IFeature):
+
+    def __init__(self):
+        super().__init__()
+
+    def handle_event(self, call) -> MsgReply | str | None:
+        return None
+
     def handle_command(self, model):
         content = tgbot.separate_command_and_content(model, 'runpy')
         if content is not None:

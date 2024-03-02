@@ -13,8 +13,13 @@ class StorageDataEntrance:
     def __init__(self, key: str, init_sql_path: str):
         if not is_valid_string(key):
             raise Exception(f'Invalid key name: {key}')
+        if os.path.isfile('save'):
+            raise Exception('The filename "save" in relative path has been occupied by a file!')
+        if not os.path.isdir('save'):
+            os.mkdir('save')
         self.target_filepath = f"save/{key}.sqlite3"
         if not os.path.exists(self.target_filepath):
+            self.first_create = True
             with open(init_sql_path, 'r') as init_sql_file:
                 try:
                     conn = sqlite3.connect(self.target_filepath)
@@ -23,6 +28,8 @@ class StorageDataEntrance:
                     print('Failed to init sql script:', e)
                 finally:
                     conn.close()
+        else:
+            self.first_create = False
 
     def select(self, from_table: str, condition: str | None = None):
         sql = f'select * from {from_table}' + f' where {condition}' if isinstance(condition, str) else ''

@@ -11,3 +11,6 @@ create table authentication_code
     owner_id int default null,
     primary key (uuid)
 );
+
+/* Default UUID: 70db1934-417e-4120-9f70-cec9d9f5a312 */
+insert into authentication_code (uuid) values ('70db1934-417e-4120-9f70-cec9d9f5a312');

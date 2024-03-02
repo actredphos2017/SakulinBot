@@ -1,4 +1,5 @@
 import inspect
+import json
 import shlex
 import uuid
 from typing import Callable
@@ -34,19 +35,26 @@ class Ability:
 class WebCraftAPIFeature(tgbot.IFeature):
 
     def __init__(self, hostname: str, admin_authorization: str, https: bool = True, max_auth_frequency: int = 5):
-        print('WebCraftAPIFeature 开始部署')
+        super().__init__()
         print('组装服务器域名……')
         while hostname.endswith('/'):
             hostname = hostname[:-1]
-        while hostname.startswith('/'):
-            hostname = hostname[1:]
-        self.hostname = ('https://' if https else 'http://') + hostname
+
+        if hostname.startswith('https://') or hostname.startswith('http://'):
+            self.hostname = hostname
+        else:
+            while hostname.startswith('/'):
+                hostname = hostname[1:]
+            self.hostname = ('https://' if https else 'http://') + hostname
 
         print('初始化本地数据库……')
         self.database_entrance = utils.StorageDataEntrance(
             'craft',
             'craft_init.sql'
         )
+        if self.database_entrance.first_create:
+            print(f'首次创建 CRAFT 数据库！已生成第一个管理员认证码: {self.create_auth_code()}')
+
         self.max_auth_frequency = max_auth_frequency
 
         print('部署能力……')
@@ -101,8 +109,25 @@ class WebCraftAPIFeature(tgbot.IFeature):
             ),
             'broadcast': Ability(
                 lambda model, msg: self.broadcast(model, msg),
-                '向服务器发送广播',
+                '向服务器发送广播（管理员）',
                 admin_only=True
+            ),
+            'banlist': Ability(
+                lambda model: self.banlist(model),
+                '查看被封禁的玩家列表',
+                show_on_help_string='封禁玩家列表'
+            ),
+            'banplayer': Ability(
+                lambda model, player: self.banplayer(model, player),
+                '封禁玩家（管理员）',
+                admin_only=True,
+                private=True
+            ),
+            'unbanplayer': Ability(
+                lambda model, player: self.unbanplayer(model, player),
+                '解封玩家（管理员）',
+                admin_only=True,
+                private=True
             )
         }
 
@@ -117,8 +142,6 @@ class WebCraftAPIFeature(tgbot.IFeature):
                 '可用命令如下'
             ]
         )
-
-        print('WebCraftAPIFeature 初始化成功！')
 
     def url(self, uri: str):
         return self.hostname + uri
@@ -140,20 +163,45 @@ class WebCraftAPIFeature(tgbot.IFeature):
 
                 in_group = tgbot.in_group(model)
                 if in_group and not target_ability.public:
-                    return f'命令 {portions[0]} 无法在群组中使用'
+                    return tgbot.MsgReply(
+                        f'命令 {portions[0]} 无法在群组中使用',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
                 elif not in_group and not target_ability.private:
-                    return f'命令 {portions[0]} 无法在私聊中使用'
+                    return tgbot.MsgReply(
+                        f'命令 {portions[0]} 无法在私聊中使用',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
 
                 if not self.is_admin(model) and target_ability.admin_only:
-                    return f'您无权使用该命令'
+                    return tgbot.MsgReply(
+                        '您无权使用该命令',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
 
                 param_num = len(inspect.signature(target_ability.func).parameters) - 1
                 if (param_num + 1) == len(portions):
-                    return target_ability.func(model, *portions[1:])
+                    res = target_ability.func(model, *portions[1:])
+                    if isinstance(res, tgbot.MsgReply) and target_ability.show_back_to_help:
+                        res.events.append(tgbot.EventKeyboard('返回帮助', 'CRAFT help'))
+                    elif isinstance(res, str) and target_ability.show_back_to_help:
+                        res = tgbot.MsgReply(res, [tgbot.EventKeyboard('返回帮助', 'CRAFT help')])
+                    return res
                 else:
                     return f'命令 {portions[0]} 需要接收 {param_num} 个参数'
             else:
-                return f'命令 {portions[0]} 不存在'
+                return tgbot.MsgReply(
+                    f'命令 {portions[0]} 不存在',
+                    [
+                        tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                    ]
+                )
 
         return None
 
@@ -168,12 +216,27 @@ class WebCraftAPIFeature(tgbot.IFeature):
                 target_ability = self.abilities[portions[0]]
                 in_group = tgbot.in_group(call)
                 if in_group and not target_ability.public:
-                    return f'命令 {portions[0]} 无法在群组中使用'
+                    return tgbot.MsgReply(
+                        f'命令 {portions[0]} 无法在群组中使用',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
                 elif not in_group and not target_ability.private:
-                    return f'命令 {portions[0]} 无法在私聊中使用'
+                    return tgbot.MsgReply(
+                        f'命令 {portions[0]} 无法在私聊中使用',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
 
                 if not self.is_admin(call) and target_ability.admin_only:
-                    return f'您无权使用该命令'
+                    return tgbot.MsgReply(
+                        '您无权使用该命令',
+                        [
+                            tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                        ]
+                    )
 
                 param_num = len(inspect.signature(target_ability.func).parameters) - 1
                 if (param_num + 1) == len(portions):
@@ -186,7 +249,12 @@ class WebCraftAPIFeature(tgbot.IFeature):
                 else:
                     return f'命令 {portions[0]} 需要接收 {param_num} 个参数'
             else:
-                return f'命令 {portions[0]} 不存在'
+                return tgbot.MsgReply(
+                    f'命令 {portions[0]} 不存在',
+                    [
+                        tgbot.EventKeyboard('查看帮助', 'CRAFT help')
+                    ]
+                )
 
         return None
 
@@ -247,6 +315,8 @@ class WebCraftAPIFeature(tgbot.IFeature):
         return self.max_auth_frequency - self.database_entrance.select('try_apply_record', f'id = "{user_id}"')[0][1]
 
     def authentication(self, model, password: str):
+        if self.is_admin(model):
+            return '您已是管理员，请勿重复认证'
         if self.out_of_frequency(model.from_user.id):
             return '您无法进行认证'
         target = self.database_entrance.select(
@@ -266,12 +336,15 @@ class WebCraftAPIFeature(tgbot.IFeature):
             )
             return '认证成功！'
 
-    def generate_auth_code(self, model):
+    def create_auth_code(self) -> str:
         au_code = str(uuid.uuid4())
         self.database_entrance.insert('authentication_code', {
             'uuid': f'"{au_code}"'
         })
-        return f'认证码生成成功！\n{au_code}\n请谨慎使用！'
+        return au_code
+
+    def generate_auth_code(self, model):
+        return f'认证码生成成功！\n{self.create_auth_code()}\n请谨慎使用！'
 
     def get_request(
             self,
@@ -307,15 +380,15 @@ class WebCraftAPIFeature(tgbot.IFeature):
             body: dict,
             headers: dict | None = None,
             normal_body: Callable[[dict], bool] = lambda _: True,
-            normal_status: str = '200'
+            normal_status: str = '202'
     ) -> dict | str:
         url = self.url(uri)
         try:
             if headers is None:
                 print('POST:', url)
-                response = requests.post(url, body, timeout=(5, 10))
+                response = requests.post(url, json.dumps(body), timeout=(5, 10))
             else:
-                response = requests.post(url, body, timeout=(5, 10), headers=headers)
+                response = requests.post(url, json.dumps(body), timeout=(5, 10), headers=headers)
             if str(response.status_code) != normal_status:
                 return f'响应状态码异常：{response.status_code}'
             body = response.json()
@@ -347,7 +420,7 @@ class WebCraftAPIFeature(tgbot.IFeature):
         )
         if isinstance(response_body, str):
             return response_body
-        return '服务器响应成功！\nAPI信息：\n名称：{}\n版本：{}\n描述：{}\n作者：{}\n发布时间：{}\n网站：{}\n文档：{}'.format(
+        return 'API信息：\n名称：{}\n版本：{}\n描述：{}\n作者：{}\n发布时间：{}\n网站：{}\n文档：{}'.format(
             response_body['name'],
             response_body['version'],
             response_body['description'],
@@ -364,7 +437,7 @@ class WebCraftAPIFeature(tgbot.IFeature):
         )
         if isinstance(data, str):
             return data
-        return '服务器响应成功！\n核心名称：{}\n版本：{}\nBukkit 版本：{}\nIP：{}\n端口：{}\n标题：{}\n状态：{}'.format(
+        return '核心名称：{}\n版本：{}\nBukkit 版本：{}\nIP：{}\n端口：{}\n标题：{}\n状态：{}'.format(
             data['serverName'],
             data['serverVersion'],
             data['serverBukkitVersion'],
@@ -382,9 +455,9 @@ class WebCraftAPIFeature(tgbot.IFeature):
         if isinstance(data, str):
             return data
         if data['onlinePlayers'] == 0:
-            return '服务器响应成功！\n当前服务器中没有玩家'
+            return '当前服务器中没有玩家'
         else:
-            return '服务器响应成功！\n当前服务器中有 {} 位玩家\n玩家列表：\n'.format(
+            return '当前服务器中有 {} 位玩家\n玩家列表：\n'.format(
                 data['onlinePlayers']) + '\n'.join(f' - {player}' for player in data['online'])
 
     def world(self, model):
@@ -428,13 +501,58 @@ class WebCraftAPIFeature(tgbot.IFeature):
     def broadcast(self, model, msg):
         data = self.post_request(
             '/api/v1/chat/broadcast/all',
-            {'message': msg},
+            {'message': f'[Telegram @{model.from_user.username}] {msg}'},
             headers=self.admin_authorization_headers
         )
         if isinstance(data, str):
             return data
         return '{}\n代码：{}\n消息：{}'.format(
             '发送成功' if data['success'] else '发送失败',
+            data['code'],
+            data['message']
+        )
+
+    def banlist(self, model):
+        data = self.get_request(
+            '/api/v1/banlist/players',
+            normal_body=lambda body: 'bannedPlayers' in body
+        )
+        if isinstance(data, str):
+            return data
+        if data['bannedPlayers'] == 0:
+            return '没有玩家被封禁'
+        else:
+            return '服务器共封禁了 {} 位玩家\n被封禁玩家列表：\n'.format(
+                data['bannedPlayers']) + '\n'.join(f' - {player}' for player in data['players'])
+
+    def banplayer(self, model, player):
+        data = self.post_request(
+            '/api/v1/banlist/players/ban',
+            {
+                'player': player
+            },
+            headers=self.admin_authorization_headers
+        )
+        if isinstance(data, str):
+            return data
+        return '{}\n代码：{}\n消息：{}'.format(
+            '封禁成功' if data['success'] else '封禁失败',
+            data['code'],
+            data['message']
+        )
+
+    def unbanplayer(self, model, player):
+        data = self.post_request(
+            '/api/v1/banlist/players/pardon',
+            {
+                'player': player
+            },
+            headers=self.admin_authorization_headers
+        )
+        if isinstance(data, str):
+            return data
+        return '{}\n代码：{}\n消息：{}'.format(
+            '解封成功' if data['success'] else '解封失败',
             data['code'],
             data['message']
         )

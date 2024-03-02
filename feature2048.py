@@ -2,6 +2,7 @@ import json
 import random
 
 import tgbot
+from tgbot import MsgReply
 
 
 class _2048Board:
@@ -137,10 +138,14 @@ def msg_view(status):
 
 class _2048Feature(tgbot.IFeature):
 
+    def handle_event(self, call) -> MsgReply | str | None:
+        return None
+
     def register_commands(self) -> list[str]:
         return ['2048', 'up', 'down', 'left', 'right']
 
     def __init__(self):
+        super().__init__()
         self.board_map = {}
 
     def is_playing(self, key):

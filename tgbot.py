@@ -55,6 +55,10 @@ class MsgReply:
 
 
 class IFeature:
+
+    def __init__(self):
+        print(f'\n* 开始部署 {self.__class__.__name__} *')
+
     @abstractmethod
     def handle_command(self, model) -> MsgReply | str | None:
         return None
@@ -138,7 +142,7 @@ class BotBuilder:
     def run(self):
         if self.start is None:
             raise Exception('Robot Not Loaded')
-        print('Robot Service Start!')
+        print('\n* 启动机器人服务器 *')
         self.start()
 
 
